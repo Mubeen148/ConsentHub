@@ -1,0 +1,14 @@
+spring:
+  graphql:
+    graphiql:
+      enabled: false
+    schema:
+      introspection:
+        enabled: ${GRAPHQL_INTROSPECTION_ENABLED:false}
+
+consenthub:
+  jwt:
+    # Empty default in prod so ProdSecretValidator fails startup immediately if JWT_SECRET env var is missing.
+    secret: ${JWT_SECRET:}
+  cookie:
+    secure: ${APP_COOKIE_SECURE:true}

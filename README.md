@@ -1,0 +1,3 @@
+# ConsentHub
+
+Initializing repository...

@@ -1,0 +1,546 @@
+# =============================================================================
+# ConsentHub — Frozen GraphQL Schema Contract (Spring for GraphQL SDL)
+# File: docs/contracts/graphql-schema.graphqls
+# Gate 1 Status: FROZEN (Synced verbatim to backend/src/main/resources/graphql/schema.graphqls)
+# =============================================================================
+# Conventions:
+#   - Endpoint: POST /graphql (supports cookie-authenticated users + anonymous visitors)
+#   - Custom Scalar: `JSON` (wired via `graphql.scalars.ExtendedScalars.Json`)
+#   - Timestamps: ISO-8601 UTC strings (e.g., "2026-11-24T09:15:30.123Z")
+#   - Authorization:
+#       * `admin*` queries and Admin mutations require authenticated `ROLE_ADMIN`
+#       * `me`, `myDataRequests`, `updateMyProfile`, `createDataRequest` require authenticated user
+#       * `screen`, `myConsentState`, `myConsentHistory`, `purposes`, `policyVersions`,
+#         `regionRules`, `saveConsentPreferences`, `acceptAllConsent`, `rejectOptionalConsent`
+#         support BOTH authenticated users (`user:<uuid>`) and anonymous visitors (`anon:<id>`).
+# =============================================================================
+
+scalar JSON
+
+# -----------------------------------------------------------------------------
+# Root Query & Mutation Operations
+# -----------------------------------------------------------------------------
+type Query {
+    "Returns the currently authenticated user profile, or null if unauthenticated."
+    me: UserProfile
+
+    "Core Server-Driven UI (SDUI) endpoint returning a versioned component tree tailored to region, policy version, consent state, and sticky A/B experiment assignment."
+    screen(name: ScreenName!, context: ScreenContextInput): SduiScreen!
+
+    "Returns effective consent state across all active purposes, active policy version, re-consent requirement flag, and resolved regional rule."
+    myConsentState(subjectKey: String, region: RegionCode): ConsentStatusBundle!
+
+    "Returns immutable chronological consent ledger entries for the authenticated user (or supplied anonymous subjectKey)."
+    myConsentHistory(subjectKey: String, limit: Int = 50): [ConsentHistoryEntry!]!
+
+    "Returns DSAR (Data Export & Data Deletion) requests submitted by the authenticated user."
+    myDataRequests: [DataRequest!]!
+
+    "Lists configured consent purposes ordered by displayOrder."
+    purposes(includeInactive: Boolean = false): [ConsentPurpose!]!
+
+    "Lists all privacy policy versions ordered by versionNumber descending."
+    policyVersions: [PolicyVersion!]!
+
+    "Lists regional regulatory rules (EU/GDPR, US_CA/CCPA, GLOBAL/DEFAULT)."
+    regionRules: [RegionRule!]!
+
+    # --- Admin Governance Queries (Require ROLE_ADMIN) ---
+
+    "Lists all SDUI A/B experiments with live exposure, conversion, and consentRate metrics per variant."
+    adminExperiments: [ExperimentSummary!]!
+
+    "Lists DSAR tickets across all users, optionally filtered by lifecycle status."
+    adminDataRequests(status: DataRequestStatus): [DataRequest!]!
+
+    "Aggregates KPI metrics, daily consent time-series, regional breakdown, and per-purpose opt-in rates."
+    adminAnalytics(days: Int = 30): ConsentAnalytics!
+
+    "Returns append-only SHA-256 hash-chained governance audit logs."
+    adminAuditLogs(limit: Int = 100, actionFilter: String): [AuditLogEntry!]!
+
+    "Cryptographically verifies the entire audit_logs SHA-256 hash chain from genesis to latest entry."
+    verifyAuditChain: AuditChainVerification!
+
+    "Lists registered third-party SDK / REST API keys (never exposes raw secret after creation)."
+    adminApiKeys: [ApiKeyInfo!]!
+}
+
+type Mutation {
+    # --- Visitor & Authenticated User Consent & Privacy Rights ---
+
+    "Saves granular per-purpose consent choices (essential purposes are always enforced as true)."
+    saveConsentPreferences(input: SaveConsentInput!): ConsentStatusBundle!
+
+    "Grants all active purposes (essential + optional) under the currently active policy version."
+    acceptAllConsent(
+        subjectKey: String
+        region: RegionCode
+        source: String
+        experimentId: ID
+        variantKey: String
+    ): ConsentStatusBundle!
+
+    "Grants essential purposes and revokes/denies all optional purposes (symmetric GDPR Reject Optional / CCPA Do Not Sell or Share)."
+    rejectOptionalConsent(
+        subjectKey: String
+        region: RegionCode
+        source: String
+        experimentId: ID
+        variantKey: String
+    ): ConsentStatusBundle!
+
+    "Updates the authenticated user's display name and default privacy region."
+    updateMyProfile(input: UpdateProfileInput!): UserProfile!
+
+    "Submits a self-service DSAR ticket (EXPORT or DELETE). DELETE requires confirmationText = 'DELETE MY DATA'."
+    createDataRequest(input: CreateDataRequestInput!): DataRequest!
+
+    # --- Admin Governance Mutations (Require ROLE_ADMIN) ---
+
+    "Creates a new consent purpose or updates an existing purpose definition."
+    upsertPurpose(input: UpsertPurposeInput!): ConsentPurpose!
+
+    "Publishes a new immutable privacy policy version; if activateImmediately=true, marks it active and triggers re-consent when requiresReconsent=true."
+    publishPolicyVersion(input: PublishPolicyVersionInput!): PolicyVersion!
+
+    "Updates regulatory consent model, banner style, symmetric reject toggle, and retention period for a region."
+    updateRegionRule(input: UpdateRegionRuleInput!): RegionRule!
+
+    "Creates a multi-variant sticky A/B experiment targeting an SDUI screen."
+    createExperiment(input: CreateExperimentInput!): ExperimentSummary!
+
+    "Transitions an experiment between DRAFT, RUNNING, PAUSED, and CONCLUDED."
+    updateExperimentStatus(id: ID!, status: ExperimentStatus!): ExperimentSummary!
+
+    "Advances or resolves a DSAR ticket (IN_REVIEW, APPROVED, COMPLETED, REJECTED); completing DELETE pseudonymizes user PII."
+    processDataRequest(input: ProcessDataRequestInput!): DataRequest!
+
+    "Generates a new API key, storing only its SHA-256 hash and returning plainTextKey once."
+    createApiKey(input: CreateApiKeyInput!): CreatedApiKeyResult!
+
+    "Immediately deactivates an API key so subsequent /api/v1/sdk/* calls with it return 401."
+    revokeApiKey(id: ID!): Boolean!
+}
+
+# -----------------------------------------------------------------------------
+# Enums (Exact 1:1 Parity with PostgreSQL CHECK Constraints & SDUI Schema)
+# -----------------------------------------------------------------------------
+enum UserRole {
+    USER
+    ADMIN
+}
+
+enum RegionCode {
+    EU
+    US_CA
+    GLOBAL
+}
+
+enum RegulatoryRegime {
+    GDPR
+    CCPA
+    DEFAULT
+}
+
+enum ConsentModel {
+    OPT_IN
+    OPT_OUT
+    NOTICE_ONLY
+}
+
+enum BannerStyle {
+    MODAL
+    BANNER
+    COMPACT
+}
+
+enum LegalBasis {
+    STRICTLY_NECESSARY
+    CONSENT
+    LEGITIMATE_INTEREST_OPT_OUT
+}
+
+enum ScreenName {
+    CONSENT_BANNER
+    PREFERENCE_CENTER
+    PRIVACY_OVERVIEW
+}
+
+enum ExperimentStatus {
+    DRAFT
+    RUNNING
+    PAUSED
+    CONCLUDED
+}
+
+enum DataRequestType {
+    EXPORT
+    DELETE
+}
+
+enum DataRequestStatus {
+    PENDING
+    IN_REVIEW
+    APPROVED
+    COMPLETED
+    REJECTED
+}
+
+# -----------------------------------------------------------------------------
+# User & Governance Domain Types
+# -----------------------------------------------------------------------------
+type UserProfile {
+    id: ID!
+    email: String!
+    fullName: String!
+    role: UserRole!
+    region: RegionCode!
+    subjectKey: String!
+    createdAt: String!
+    updatedAt: String!
+}
+
+type ConsentPurpose {
+    id: ID!
+    slug: String!
+    name: String!
+    description: String!
+    legalBasis: LegalBasis!
+    isEssential: Boolean!
+    active: Boolean!
+    displayOrder: Int!
+    createdAt: String!
+    updatedAt: String!
+}
+
+type PolicyVersion {
+    id: ID!
+    versionNumber: Int!
+    versionLabel: String!
+    title: String!
+    summary: String!
+    contentMarkdown: String!
+    requiresReconsent: Boolean!
+    isActive: Boolean!
+    publishedByEmail: String
+    publishedAt: String!
+    createdAt: String!
+}
+
+type RegionRule {
+    id: ID!
+    regionCode: RegionCode!
+    regimeName: RegulatoryRegime!
+    consentModel: ConsentModel!
+    bannerStyle: BannerStyle!
+    showRejectAll: Boolean!
+    retentionDays: Int!
+    updatedAt: String!
+}
+
+# -----------------------------------------------------------------------------
+# Effective Consent State & Immutable Consent Ledger Types
+# -----------------------------------------------------------------------------
+type ConsentStatusBundle {
+    subjectKey: String!
+    hasConsented: Boolean!
+    needsReconsent: Boolean!
+    shouldShowBanner: Boolean!
+    consentedPolicyVersion: String
+    activePolicyVersion: PolicyVersion!
+    regionRule: RegionRule!
+    decisions: [PurposeConsentState!]!
+    updatedAt: String
+}
+
+type PurposeConsentState {
+    purposeId: ID!
+    slug: String!
+    name: String!
+    description: String!
+    legalBasis: LegalBasis!
+    isEssential: Boolean!
+    granted: Boolean!
+    source: String
+    updatedAt: String
+}
+
+type ConsentHistoryEntry {
+    id: ID!
+    subjectKey: String!
+    purposeSlug: String!
+    purposeName: String!
+    previousGranted: Boolean
+    newGranted: Boolean!
+    policyVersionLabel: String!
+    regionCode: RegionCode!
+    source: String!
+    ipHash: String
+    userAgentSummary: String
+    experimentVariant: String
+    proofHash: String!
+    occurredAt: String!
+}
+
+# -----------------------------------------------------------------------------
+# Server-Driven UI (SDUI) Types (1:1 Match with docs/contracts/sdui-schema.json)
+# -----------------------------------------------------------------------------
+type SduiScreen {
+    schemaVersion: String!
+    screenName: ScreenName!
+    policyVersion: String!
+    needsReconsent: Boolean!
+    regionCode: RegionCode!
+    regime: RegulatoryRegime!
+    experiment: SduiExperimentContext
+    root: SduiNode!
+}
+
+type SduiExperimentContext {
+    experimentId: ID!
+    experimentSlug: String!
+    variantKey: String!
+}
+
+type SduiNode {
+    id: String!
+    type: String!
+    props: JSON!
+    children: [SduiNode!]!
+    actions: [SduiAction!]!
+}
+
+type SduiAction {
+    trigger: String!
+    type: String!
+    payload: JSON
+}
+
+input ScreenContextInput {
+    subjectKey: String
+    region: RegionCode
+    locale: String = "en-US"
+    deviceType: String = "DESKTOP"
+    previewVariantKey: String
+}
+
+# -----------------------------------------------------------------------------
+# DSAR (Data Subject Access Request) Types
+# -----------------------------------------------------------------------------
+type DataRequest {
+    id: ID!
+    userId: ID!
+    userEmail: String!
+    userFullName: String!
+    requestType: DataRequestType!
+    status: DataRequestStatus!
+    reason: String
+    adminNotes: String
+    processedByEmail: String
+    requestedAt: String!
+    updatedAt: String!
+    completedAt: String
+}
+
+# -----------------------------------------------------------------------------
+# Experimentation, Analytics, API Keys & Audit Chain Types
+# -----------------------------------------------------------------------------
+type ExperimentSummary {
+    id: ID!
+    slug: String!
+    name: String!
+    description: String!
+    targetScreen: ScreenName!
+    targetRegion: RegionCode
+    status: ExperimentStatus!
+    totalExposures: Int!
+    totalConversions: Int!
+    overallConsentRate: Float!
+    variants: [ExperimentVariantMetric!]!
+    createdAt: String!
+    updatedAt: String!
+}
+
+type ExperimentVariantMetric {
+    key: String!
+    name: String!
+    weight: Int!
+    headline: String!
+    body: String!
+    primaryCtaLabel: String!
+    secondaryCtaLabel: String!
+    layoutTone: String!
+    exposures: Int!
+    conversions: Int!
+    consentRate: Float!
+}
+
+type ConsentAnalytics {
+    days: Int!
+    totalSubjects: Int!
+    totalConsentEvents: Int!
+    overallOptInRate: Float!
+    reconsentCompletionRate: Float!
+    pendingDsarCount: Int!
+    activeExperimentsCount: Int!
+    dailyMetrics: [DailyConsentMetric!]!
+    regionalBreakdown: [RegionConsentMetric!]!
+    purposeOptInRates: [PurposeOptInMetric!]!
+}
+
+type DailyConsentMetric {
+    date: String!
+    acceptAllCount: Int!
+    rejectOptionalCount: Int!
+    customCount: Int!
+    totalInteractions: Int!
+    optInRate: Float!
+}
+
+type RegionConsentMetric {
+    regionCode: RegionCode!
+    regimeName: RegulatoryRegime!
+    totalSubjects: Int!
+    optInCount: Int!
+    optOutCount: Int!
+    consentRate: Float!
+}
+
+type PurposeOptInMetric {
+    purposeSlug: String!
+    purposeName: String!
+    isEssential: Boolean!
+    grantedCount: Int!
+    deniedCount: Int!
+    optInRate: Float!
+}
+
+type AuditLogEntry {
+    id: ID!
+    sequenceNum: Int!
+    actorId: ID
+    actorEmail: String!
+    actorRole: String!
+    action: String!
+    entityType: String!
+    entityId: String!
+    details: JSON!
+    prevHash: String!
+    entryHash: String!
+    createdAt: String!
+}
+
+type AuditChainVerification {
+    chainValid: Boolean!
+    totalEntriesChecked: Int!
+    brokenAtSequenceNum: Int
+    message: String!
+    verifiedAt: String!
+}
+
+type ApiKeyInfo {
+    id: ID!
+    name: String!
+    keyPrefix: String!
+    allowedOrigins: String!
+    scopes: String!
+    active: Boolean!
+    lastUsedAt: String
+    createdAt: String!
+}
+
+type CreatedApiKeyResult {
+    plainTextKey: String!
+    apiKey: ApiKeyInfo!
+}
+
+# -----------------------------------------------------------------------------
+# Mutation Input Types
+# -----------------------------------------------------------------------------
+input SaveConsentInput {
+    subjectKey: String
+    region: RegionCode
+    source: String = "PREFERENCE_CENTER"
+    experimentId: ID
+    variantKey: String
+    decisions: [PurposeDecisionInput!]!
+}
+
+input PurposeDecisionInput {
+    purposeSlug: String!
+    granted: Boolean!
+}
+
+input UpdateProfileInput {
+    fullName: String!
+    region: RegionCode!
+}
+
+input CreateDataRequestInput {
+    requestType: DataRequestType!
+    reason: String
+    confirmationText: String
+}
+
+input UpsertPurposeInput {
+    id: ID
+    slug: String!
+    name: String!
+    description: String!
+    legalBasis: LegalBasis!
+    isEssential: Boolean!
+    active: Boolean!
+    displayOrder: Int!
+}
+
+input PublishPolicyVersionInput {
+    versionLabel: String!
+    title: String!
+    summary: String!
+    contentMarkdown: String!
+    requiresReconsent: Boolean!
+    activateImmediately: Boolean = true
+}
+
+input UpdateRegionRuleInput {
+    regionCode: RegionCode!
+    regimeName: RegulatoryRegime!
+    consentModel: ConsentModel!
+    bannerStyle: BannerStyle!
+    showRejectAll: Boolean!
+    retentionDays: Int!
+}
+
+input CreateExperimentInput {
+    slug: String!
+    name: String!
+    description: String!
+    targetScreen: ScreenName!
+    targetRegion: RegionCode
+    status: ExperimentStatus = DRAFT
+    variants: [ExperimentVariantInput!]!
+}
+
+input ExperimentVariantInput {
+    key: String!
+    name: String!
+    weight: Int!
+    headline: String!
+    body: String!
+    primaryCtaLabel: String!
+    secondaryCtaLabel: String!
+    layoutTone: String = "STANDARD"
+}
+
+input ProcessDataRequestInput {
+    id: ID!
+    status: DataRequestStatus!
+    adminNotes: String
+}
+
+input CreateApiKeyInput {
+    name: String!
+    allowedOrigins: String = "*"
+    scopes: String = "sdk:read,sdk:write"
+}

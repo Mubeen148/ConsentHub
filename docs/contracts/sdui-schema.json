@@ -1,0 +1,519 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consenthub.io/contracts/sdui-schema.v1.json",
+  "title": "ConsentHub Server-Driven UI (SDUI) Screen Contract",
+  "description": "Versioned Server-Driven UI (SDUI) specification (schemaVersion 1.0) returned by GraphQL `screen(name, context)` and REST `GET /api/v1/sdk/config`. Client runtimes validate `type` as a non-empty string so unrecognized future component types gracefully render `UnknownComponentFallback` without crashing, while the backend SDUI schema validator additionally enforces membership in `$defs/CanonicalComponentType` in strict mode and caps tree nesting depth at <= 5.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "screenName",
+    "policyVersion",
+    "needsReconsent",
+    "regionCode",
+    "regime",
+    "experiment",
+    "root"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$",
+      "const": "1.0",
+      "description": "Semantic contract version of the SDUI envelope."
+    },
+    "screenName": {
+      "$ref": "#/$defs/ScreenName"
+    },
+    "policyVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "description": "Active privacy policy version label (e.g., 'v2.0')."
+    },
+    "needsReconsent": {
+      "type": "boolean",
+      "description": "True when the subject has never consented or consented only to an older policy version superseded by a re-consent-required policy."
+    },
+    "regionCode": {
+      "$ref": "#/$defs/RegionCode"
+    },
+    "regime": {
+      "$ref": "#/$defs/RegulatoryRegime"
+    },
+    "experiment": {
+      "oneOf": [
+        { "$ref": "#/$defs/SduiExperimentContext" },
+        { "type": "null" }
+      ],
+      "description": "Sticky A/B experiment assignment applied during server-side screen composition, or null when no RUNNING experiment targets this screen/region."
+    },
+    "root": {
+      "$ref": "#/$defs/SduiNode"
+    }
+  },
+  "$defs": {
+    "ScreenName": {
+      "type": "string",
+      "enum": [
+        "CONSENT_BANNER",
+        "PREFERENCE_CENTER",
+        "PRIVACY_OVERVIEW"
+      ]
+    },
+    "RegionCode": {
+      "type": "string",
+      "enum": [
+        "EU",
+        "US_CA",
+        "GLOBAL"
+      ]
+    },
+    "RegulatoryRegime": {
+      "type": "string",
+      "enum": [
+        "GDPR",
+        "CCPA",
+        "DEFAULT"
+      ]
+    },
+    "CanonicalComponentType": {
+      "type": "string",
+      "description": "Strict-mode server allowlist of canonical SDUI component types implemented in the Frontend Component Registry (`frontend/src/sdui/registry.tsx`).",
+      "enum": [
+        "Container",
+        "Card",
+        "Stack",
+        "BannerShell",
+        "Header",
+        "Text",
+        "Badge",
+        "Divider",
+        "PurposeToggleRow",
+        "PolicySummaryAccordion",
+        "ActionBar",
+        "Button",
+        "NoticeCallout",
+        "StatGrid",
+        "StatItem"
+      ]
+    },
+    "SduiExperimentContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "experimentId",
+        "experimentSlug",
+        "variantKey"
+      ],
+      "properties": {
+        "experimentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "experimentSlug": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variantKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "SduiNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "props",
+        "children",
+        "actions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Stable unique identifier within the screen tree (used as React key and deterministic `data-sdui-id` selector)."
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Component type name. Canonical values are listed in `$defs/CanonicalComponentType`. Unknown strings MUST NOT crash the client; the React SDUI renderer MUST render `<UnknownComponentFallback node={node} />` (non-blocking diagnostic container in dev/inspector, clean safe skip or fallback text if `props.fallbackText` is provided)."
+        },
+        "props": {
+          "type": "object",
+          "description": "Component-specific configuration props matching `$defs/ComponentPropsCatalog` for canonical types."
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SduiNode"
+          },
+          "default": [],
+          "description": "Ordered child SduiNode list (max tree depth <= 5 guaranteed by server)."
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SduiAction"
+          },
+          "default": [],
+          "description": "Declarative server-defined interaction handlers bound to UI events (`onClick`, `onToggle`)."
+        }
+      }
+    },
+    "SduiAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trigger",
+        "type"
+      ],
+      "properties": {
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "onClick",
+            "onToggle"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "SUBMIT_CONSENT",
+            "ACCEPT_ALL",
+            "REJECT_OPTIONAL",
+            "TOGGLE_PURPOSE",
+            "NAVIGATE",
+            "OPEN_PREFERENCES",
+            "DISMISS"
+          ]
+        },
+        "payload": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": {},
+          "description": "Structured parameters for the action dispatcher (e.g., `{ \"purposeSlug\": \"analytics\" }`, `{ \"to\": \"/privacy/preferences\" }`, `{ \"source\": \"BANNER\", \"experimentId\": \"...\", \"variantKey\": \"control\" }`)."
+        }
+      }
+    },
+    "ComponentPropsCatalog": {
+      "description": "Authoritative prop field names shared 1:1 between backend `SduiEngineService` and frontend `sdui/registry.tsx`.",
+      "type": "object",
+      "properties": {
+        "Container": {
+          "type": "object",
+          "properties": {
+            "maxWidth": { "type": "string", "enum": ["portal", "admin", "narrow", "full"] },
+            "padding": { "type": "string", "enum": ["none", "sm", "md", "lg"] }
+          }
+        },
+        "Card": {
+          "type": "object",
+          "properties": {
+            "padding": { "type": "string", "enum": ["compact", "default", "flush"] },
+            "tone": { "type": "string", "enum": ["surface", "subtle"] }
+          }
+        },
+        "Stack": {
+          "type": "object",
+          "properties": {
+            "direction": { "type": "string", "enum": ["vertical", "horizontal"] },
+            "gap": { "type": "string", "enum": ["xs", "sm", "md", "lg", "xl"] },
+            "align": { "type": "string", "enum": ["start", "center", "end", "stretch", "between"] },
+            "wrap": { "type": "boolean" }
+          }
+        },
+        "BannerShell": {
+          "type": "object",
+          "required": ["bannerStyle", "ariaLabel"],
+          "properties": {
+            "bannerStyle": { "type": "string", "enum": ["MODAL", "BANNER", "COMPACT"] },
+            "ariaLabel": { "type": "string" },
+            "dismissible": { "type": "boolean" }
+          }
+        },
+        "Header": {
+          "type": "object",
+          "required": ["title"],
+          "properties": {
+            "title": { "type": "string" },
+            "subtitle": { "type": "string" },
+            "eyebrow": { "type": "string" },
+            "level": { "type": "integer", "enum": [1, 2, 3] }
+          }
+        },
+        "Text": {
+          "type": "object",
+          "required": ["content"],
+          "properties": {
+            "content": { "type": "string" },
+            "variant": { "type": "string", "enum": ["body-base", "body-sm", "caption-xs", "mono-xs"] },
+            "tone": { "type": "string", "enum": ["primary", "secondary", "muted"] },
+            "weight": { "type": "string", "enum": ["regular", "medium", "semibold"] }
+          }
+        },
+        "Badge": {
+          "type": "object",
+          "required": ["label", "variant"],
+          "properties": {
+            "label": { "type": "string" },
+            "variant": { "type": "string", "enum": ["GDPR", "CCPA", "DEFAULT", "ESSENTIAL", "SUCCESS", "WARNING", "DANGER"] }
+          }
+        },
+        "Divider": {
+          "type": "object",
+          "properties": {
+            "spacing": { "type": "string", "enum": ["sm", "md", "lg"] }
+          }
+        },
+        "PurposeToggleRow": {
+          "type": "object",
+          "required": ["purposeId", "purposeSlug", "title", "description", "legalBasis", "legalBasisLabel", "checked", "required"],
+          "properties": {
+            "purposeId": { "type": "string" },
+            "purposeSlug": { "type": "string" },
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "legalBasis": { "type": "string", "enum": ["STRICTLY_NECESSARY", "CONSENT", "LEGITIMATE_INTEREST_OPT_OUT"] },
+            "legalBasisLabel": { "type": "string" },
+            "checked": { "type": "boolean" },
+            "required": { "type": "boolean" },
+            "badgeLabel": { "type": "string" }
+          }
+        },
+        "PolicySummaryAccordion": {
+          "type": "object",
+          "required": ["versionLabel", "title", "summary", "publishedAt"],
+          "properties": {
+            "versionLabel": { "type": "string" },
+            "title": { "type": "string" },
+            "summary": { "type": "string" },
+            "contentMarkdown": { "type": "string" },
+            "publishedAt": { "type": "string" },
+            "defaultExpanded": { "type": "boolean" }
+          }
+        },
+        "ActionBar": {
+          "type": "object",
+          "properties": {
+            "layout": { "type": "string", "enum": ["symmetric-inline", "stacked", "space-between"] },
+            "sticky": { "type": "boolean" }
+          }
+        },
+        "Button": {
+          "type": "object",
+          "required": ["label", "variant"],
+          "properties": {
+            "label": { "type": "string" },
+            "variant": { "type": "string", "enum": ["primary", "secondary", "ghost", "destructive"] },
+            "fullWidth": { "type": "boolean" },
+            "disabled": { "type": "boolean" },
+            "testId": { "type": "string" }
+          }
+        },
+        "NoticeCallout": {
+          "type": "object",
+          "required": ["title", "message", "tone"],
+          "properties": {
+            "title": { "type": "string" },
+            "message": { "type": "string" },
+            "tone": { "type": "string", "enum": ["info", "success", "warning", "danger"] }
+          }
+        },
+        "StatGrid": {
+          "type": "object",
+          "properties": {
+            "columns": { "type": "integer", "enum": [2, 3, 4] }
+          }
+        },
+        "StatItem": {
+          "type": "object",
+          "required": ["label", "value"],
+          "properties": {
+            "label": { "type": "string" },
+            "value": { "type": "string" },
+            "sublabel": { "type": "string" },
+            "tone": { "type": "string", "enum": ["default", "success", "warning", "brand"] }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schemaVersion": "1.0",
+      "screenName": "CONSENT_BANNER",
+      "policyVersion": "v2.0",
+      "needsReconsent": true,
+      "regionCode": "EU",
+      "regime": "GDPR",
+      "experiment": {
+        "experimentId": "44444444-4444-4444-8444-444444444444",
+        "experimentSlug": "eu-banner-clarity-q4",
+        "variantKey": "control"
+      },
+      "root": {
+        "id": "banner-shell",
+        "type": "BannerShell",
+        "props": {
+          "bannerStyle": "MODAL",
+          "ariaLabel": "Privacy & Data Processing Consent",
+          "dismissible": false
+        },
+        "children": [
+          {
+            "id": "banner-main-stack",
+            "type": "Stack",
+            "props": {
+              "direction": "vertical",
+              "gap": "md"
+            },
+            "children": [
+              {
+                "id": "banner-top-row",
+                "type": "Stack",
+                "props": {
+                  "direction": "horizontal",
+                  "gap": "sm",
+                  "align": "between",
+                  "wrap": true
+                },
+                "children": [
+                  {
+                    "id": "banner-regime-badge",
+                    "type": "Badge",
+                    "props": {
+                      "label": "GDPR · EU Strict Opt-In",
+                      "variant": "GDPR"
+                    },
+                    "children": [],
+                    "actions": []
+                  },
+                  {
+                    "id": "banner-policy-version-text",
+                    "type": "Text",
+                    "props": {
+                      "content": "Policy v2.0",
+                      "variant": "mono-xs",
+                      "tone": "muted"
+                    },
+                    "children": [],
+                    "actions": []
+                  }
+                ],
+                "actions": []
+              },
+              {
+                "id": "banner-header",
+                "type": "Header",
+                "props": {
+                  "title": "Your Privacy Choices",
+                  "subtitle": "We use strictly necessary cookies to operate ConsentHub securely, and optional analytics or personalization only with your explicit opt-in consent.",
+                  "level": 2
+                },
+                "children": [],
+                "actions": []
+              },
+              {
+                "id": "banner-policy-summary",
+                "type": "PolicySummaryAccordion",
+                "props": {
+                  "versionLabel": "v2.0",
+                  "title": "2026 Global Privacy & AI Telemetry Policy",
+                  "summary": "Clarifies zero-dark-pattern consent controls, cryptographic proof receipts, and regional retention periods.",
+                  "publishedAt": "2026-11-10T00:00:00.000Z",
+                  "defaultExpanded": false
+                },
+                "children": [],
+                "actions": []
+              },
+              {
+                "id": "banner-actions",
+                "type": "ActionBar",
+                "props": {
+                  "layout": "symmetric-inline",
+                  "sticky": false
+                },
+                "children": [
+                  {
+                    "id": "btn-accept-all",
+                    "type": "Button",
+                    "props": {
+                      "label": "Accept All",
+                      "variant": "primary",
+                      "testId": "sdui-accept-all"
+                    },
+                    "children": [],
+                    "actions": [
+                      {
+                        "trigger": "onClick",
+                        "type": "ACCEPT_ALL",
+                        "payload": {
+                          "source": "BANNER",
+                          "region": "EU",
+                          "experimentId": "44444444-4444-4444-8444-444444444444",
+                          "variantKey": "control"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "btn-reject-optional",
+                    "type": "Button",
+                    "props": {
+                      "label": "Reject Optional",
+                      "variant": "secondary",
+                      "testId": "sdui-reject-optional"
+                    },
+                    "children": [],
+                    "actions": [
+                      {
+                        "trigger": "onClick",
+                        "type": "REJECT_OPTIONAL",
+                        "payload": {
+                          "source": "BANNER",
+                          "region": "EU",
+                          "experimentId": "44444444-4444-4444-8444-444444444444",
+                          "variantKey": "control"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "btn-manage-preferences",
+                    "type": "Button",
+                    "props": {
+                      "label": "Manage Preferences",
+                      "variant": "ghost",
+                      "testId": "sdui-open-preferences"
+                    },
+                    "children": [],
+                    "actions": [
+                      {
+                        "trigger": "onClick",
+                        "type": "OPEN_PREFERENCES",
+                        "payload": {
+                          "to": "/privacy/preferences"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "actions": []
+              }
+            ],
+            "actions": []
+          }
+        ],
+        "actions": []
+      }
+    }
+  ]
+}

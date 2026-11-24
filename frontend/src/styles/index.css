@@ -1,0 +1,71 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: var(--ch-font-sans);
+    background-color: var(--ch-bg-canvas);
+    color: var(--ch-text-primary);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--ch-bg-canvas);
+    color: var(--ch-text-primary);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--ch-font-display);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ch-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ch-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.ch-skeleton {
+  border-radius: var(--ch-radius-control);
+  background: linear-gradient(
+    90deg,
+    var(--ch-bg-subtle) 25%,
+    var(--ch-bg-muted) 50%,
+    var(--ch-bg-subtle) 75%
+  );
+  background-size: 200% 100%;
+  animation: ch-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-skeleton {
+    animation: none;
+    background: var(--ch-bg-subtle);
+  }
+}

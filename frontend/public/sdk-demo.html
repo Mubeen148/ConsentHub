@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lumina Creator Studio — ConsentHub Embeddable SDK Demo</title>
+    <style>
+      :root {
+        --bg: #f7f6f3;
+        --surface: #ffffff;
+        --subtle: #efece6;
+        --border: #d0cbc0;
+        --ink: #141519;
+        --ink-sec: #45474f;
+        --ink-muted: #5c5f69;
+        --emerald-bg: #ecfdf5;
+        --emerald-ink: #065f46;
+        --crimson-bg: #fef2f2;
+        --crimson-ink: #991b1b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.5;
+      }
+      header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 0 24px;
+        min-height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 16px;
+      }
+      .brand-pill {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 9999px;
+        background: var(--subtle);
+        color: var(--ink-sec);
+        border: 1px solid var(--border);
+      }
+      .back-link {
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+      }
+      main {
+        max-width: 1040px;
+        margin: 32px auto;
+        padding: 0 20px 120px;
+        display: grid;
+        gap: 24px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 26px;
+        line-height: 1.25;
+      }
+      h2 {
+        margin: 0 0 12px 0;
+        font-size: 18px;
+      }
+      p {
+        margin: 0;
+        color: var(--ink-sec);
+        font-size: 14px;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-top: 20px;
+      }
+      label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      select,
+      button {
+        min-height: 44px;
+        padding: 0 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid #76726a;
+        background: var(--surface);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .btn-primary {
+        background: var(--ink);
+        color: #ffffff;
+        border-color: var(--ink);
+      }
+      select:focus-visible,
+      button:focus-visible,
+      a:focus-visible {
+        outline: 2px solid #1d4ed8;
+        outline-offset: 2px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .chip {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 6px 12px;
+        border-radius: 9999px;
+        border: 1px solid var(--border);
+      }
+      .chip-on {
+        background: var(--emerald-bg);
+        color: var(--emerald-ink);
+        border-color: #a7f3d0;
+      }
+      .chip-off {
+        background: var(--crimson-bg);
+        color: var(--crimson-ink);
+        border-color: #fecaca;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+      }
+      pre {
+        margin: 0;
+        background: #141519;
+        color: #f7f6f3;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        overflow-x: auto;
+        min-height: 180px;
+      }
+      .log-box {
+        background: var(--subtle);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 180px;
+        max-height: 240px;
+        overflow-y: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+      .log-line + .log-line {
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border);
+      }
+      .mono-badge {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+        background: var(--subtle);
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span>Lumina Studio</span>
+        <span class="brand-pill">Simulated 3rd-Party Host Website</span>
+      </div>
+      <a class="back-link" href="/portal">Return to ConsentHub Portal</a>
+    </header>
+
+    <main>
+      <section class="card">
+        <h1>Third-Party Embeddable SDK Live Harness (<code>consent.js</code>)</h1>
+        <p>
+          This standalone page simulates an external publisher website embedding
+          <code>&lt;script src="/consent.js" data-api-key="ch_live_demo_public_sdk_key_2026"&gt;</code>.
+          All configuration, Server-Driven UI copy, A/B variant bucketing, and consent receipts flow
+          through <code>/api/v1/sdk/*</code> authenticated via <code>X-API-Key</code>.
+        </p>
+
+        <div class="toolbar">
+          <label for="sdk-region-select">Simulate Region:</label>
+          <select id="sdk-region-select">
+            <option value="EU" selected>European Union (GDPR Opt-In Modal)</option>
+            <option value="US_CA">California, USA (CCPA Opt-Out Banner)</option>
+            <option value="GLOBAL">Global Default (Compact Notice)</option>
+          </select>
+
+          <button id="btn-open-banner" class="btn-primary" type="button">
+            Open Consent Banner
+          </button>
+          <button id="btn-reset-visitor" type="button">
+            New Visitor Session
+          </button>
+          <span id="sdk-subject-badge" class="mono-badge">anon:initializing...</span>
+        </div>
+
+        <div class="chips" aria-label="Live Script Gate Status">
+          <span id="chip-essential" class="chip chip-on">essential: GRANTED</span>
+          <span id="chip-analytics" class="chip chip-off">analytics: BLOCKED</span>
+          <span id="chip-personalization" class="chip chip-off">personalization: BLOCKED</span>
+          <span id="chip-marketing" class="chip chip-off">marketing: BLOCKED</span>
+          <span id="chip-ads" class="chip chip-off">ads: BLOCKED</span>
+        </div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card">
+          <h2>Live <code>ConsentHub.getConsent()</code> State</h2>
+          <pre id="sdk-state-json">Waiting for SDK response...</pre>
+        </section>
+
+        <section class="card">
+          <h2><code>consenthub:change</code> Event Stream</h2>
+          <div id="sdk-event-log" class="log-box" aria-live="polite"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Copy-Paste Integration Snippet</h2>
+        <pre>&lt;script
+  src="https://your-consenthub-host/consent.js"
+  data-api-key="ch_live_demo_public_sdk_key_2026"
+  data-region="EU"
+  defer
+&gt;&lt;/script&gt;</pre>
+      </section>
+    </main>
+
+    <script src="/sdk-demo-app.js" defer></script>
+    <script
+      src="/consent.js"
+      data-api-key="ch_live_demo_public_sdk_key_2026"
+      data-region="EU"
+      defer
+    ></script>
+  </body>
+</html>

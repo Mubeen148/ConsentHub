@@ -1,0 +1,107 @@
+# ==============================================================================
+# ConsentHub — Production-Parity Local Stack (Docker Compose)
+# ==============================================================================
+# Quick Start:
+#   cp .env.example .env           # optional: safe local defaults built in
+#   docker compose up --build -d   # boots PostgreSQL 16 -> Spring Boot 3 -> Nginx SPA
+#
+# Service URLs:
+#   - Privacy Center & Admin Console: http://localhost:5173
+#   - Standalone SDK Host Demo:       http://localhost:5173/sdk-demo.html
+#   - Embeddable SDK Script:          http://localhost:5173/consent.js
+#   - Backend REST & GraphQL Direct:  http://localhost:8080
+# ==============================================================================
+
+name: consenthub
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: consenthub-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-consenthub}
+      POSTGRES_USER: ${POSTGRES_USER:-consenthub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-consenthub_local_dev_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - consenthub_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-consenthub} -d $${POSTGRES_DB:-consenthub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - consenthub_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: consenthub-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-consenthub}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-consenthub}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-consenthub_local_dev_only}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-consenthub}
+      POSTGRES_USER: ${POSTGRES_USER:-consenthub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-consenthub_local_dev_only}
+      JWT_SECRET: ${JWT_SECRET:-local-dev-only-change-in-prod-minimum-32-bytes-hmac-key-2026}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-86400}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
+      IP_HASH_SALT: ${IP_HASH_SALT:-local-dev-only-ip-privacy-salt-2026}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost:8080}
+      GRAPHQL_INTROSPECTION_ENABLED: ${GRAPHQL_INTROSPECTION_ENABLED:-true}
+      DEMO_SDK_API_KEY: ${DEMO_SDK_API_KEY:-ch_live_demo_public_sdk_key_2026}
+      SERVER_PORT: "8080"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/v1/health || curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 35s
+    networks:
+      - consenthub_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_DEMO_SDK_API_KEY: ${DEMO_SDK_API_KEY:-ch_live_demo_public_sdk_key_2026}
+    container_name: consenthub-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks:
+      - consenthub_net
+
+volumes:
+  consenthub_pgdata:
+    name: consenthub_pgdata
+
+networks:
+  consenthub_net:
+    name: consenthub_net
+    driver: bridge

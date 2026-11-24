@@ -1,0 +1,366 @@
+{
+  "info": {
+    "name": "ConsentHub — Full API & GraphQL Contract Suite",
+    "description": "Automated Postman/Newman verification covering REST Auth, CSRF Double-Submit, GraphQL Server-Driven UI, Regional Consent Rules, RBAC, Self-Service JSON Export, Tamper-Evident Audit Hash Chain, and X-API-Key SDK Endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8080" },
+    { "key": "sdkApiKey", "value": "ch_live_demo_public_sdk_key_2026" },
+    { "key": "csrfToken", "value": "" },
+    { "key": "anonSubject", "value": "anon:newman_suite_2026_001" }
+  ],
+  "item": [
+    {
+      "name": "01. Health Check (/api/v1/health)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health returns 200 UP with PostgreSQL connected', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql('UP');",
+              "  pm.expect(body.database).to.eql('UP');",
+              "  pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/health"
+      }
+    },
+    {
+      "name": "02. Bootstrap CSRF Cookie (/api/v1/auth/csrf)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('CSRF endpoint issues token and cookie', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.csrfToken).to.be.a('string').and.have.length.above(31);",
+              "  pm.collectionVariables.set('csrfToken', body.csrfToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/auth/csrf"
+      }
+    },
+    {
+      "name": "03. Reject Invalid Credentials Anti-Enumeration (/api/v1/auth/login)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Invalid login returns generic 401 INVALID_CREDENTIALS', function () {",
+              "  pm.response.to.have.status(401);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.code).to.eql('INVALID_CREDENTIALS');",
+              "  pm.expect(body.message).to.eql('Invalid email or password.');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"nonexistent@consenthub.io\",\"password\":\"WrongPassword123!\"}"
+        },
+        "url": "{{baseUrl}}/api/v1/auth/login"
+      }
+    },
+    {
+      "name": "04. GraphQL SDUI Banner — EU GDPR Strict Opt-In",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('EU CONSENT_BANNER returns non-dismissible MODAL SDUI tree with sticky experiment', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const res = pm.response.json();",
+              "  pm.expect(res.errors).to.be.undefined;",
+              "  const screen = res.data.screen;",
+              "  pm.expect(screen.schemaVersion).to.eql('1.0');",
+              "  pm.expect(screen.regionCode).to.eql('EU');",
+              "  pm.expect(screen.regime).to.eql('GDPR');",
+              "  pm.expect(screen.root.type).to.eql('BannerShell');",
+              "  pm.expect(screen.root.props.bannerStyle).to.eql('MODAL');",
+              "  pm.expect(screen.root.props.dismissible).to.eql(false);",
+              "  pm.expect(screen.experiment).to.be.an('object');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"query\":\"query($ctx: ScreenContextInput){ screen(name: CONSENT_BANNER, context: $ctx){ schemaVersion screenName policyVersion regionCode regime experiment { experimentId variantKey } root { id type props } } }\",\"variables\":{\"ctx\":{\"subjectKey\":\"{{anonSubject}}\",\"region\":\"EU\"}}}"
+        },
+        "url": "{{baseUrl}}/graphql"
+      }
+    },
+    {
+      "name": "05. Login as Seeded End-User (user@consenthub.io)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('End-user login sets HttpOnly cookie and returns CSRF token', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.user.email).to.eql('user@consenthub.io');",
+              "  pm.expect(body.user.role).to.eql('USER');",
+              "  pm.collectionVariables.set('csrfToken', body.csrfToken);",
+              "  const setCookies = pm.response.headers.all().filter(h => h.key.toLowerCase() === 'set-cookie').map(h => h.value).join('; ');",
+              "  pm.expect(setCookies).to.include('HttpOnly');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"user@consenthub.io\",\"password\":\"UserPass123!\"}"
+        },
+        "url": "{{baseUrl}}/api/v1/auth/login"
+      }
+    },
+    {
+      "name": "06. Enforce Double-Submit CSRF When Header Omitted",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Cookie-authenticated POST without X-CSRF-Token returns 403 CSRF_TOKEN_INVALID', function () {",
+              "  pm.response.to.have.status(403);",
+              "  pm.expect(pm.response.json().code).to.eql('CSRF_TOKEN_INVALID');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"query\":\"{ me { id email } }\"}"
+        },
+        "url": "{{baseUrl}}/graphql"
+      }
+    },
+    {
+      "name": "07. Block Regular User From Admin Analytics (RBAC FORBIDDEN)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('ROLE_USER calling adminAnalytics receives FORBIDDEN error', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const res = pm.response.json();",
+              "  pm.expect(res.errors).to.be.an('array').that.is.not.empty;",
+              "  pm.expect(res.errors[0].extensions.classification).to.eql('FORBIDDEN');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-CSRF-Token", "value": "{{csrfToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"query\":\"{ adminAnalytics(days: 14) { totalSubjects } }\"}"
+        },
+        "url": "{{baseUrl}}/graphql"
+      }
+    },
+    {
+      "name": "08. Self-Service GDPR Art. 20 JSON Export (/api/v1/privacy/export)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Privacy export downloads no-store JSON portability bundle', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment; filename=\"consenthub-data-export-');",
+              "  pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store');",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.profile.email).to.eql('user@consenthub.io');",
+              "  pm.expect(body.currentConsentRecords).to.be.an('array').that.is.not.empty;",
+              "  pm.expect(body.consentHistoryLedger).to.be.an('array').that.is.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/privacy/export"
+      }
+    },
+    {
+      "name": "09. Login as Seeded Administrator (admin@consenthub.io)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Admin login succeeds with ROLE_ADMIN', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.user.role).to.eql('ADMIN');",
+              "  pm.collectionVariables.set('csrfToken', body.csrfToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"admin@consenthub.io\",\"password\":\"AdminPass123!\"}"
+        },
+        "url": "{{baseUrl}}/api/v1/auth/login"
+      }
+    },
+    {
+      "name": "10. Admin Analytics, Experiments & Cryptographic Audit Chain Verification",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Admin analytics and SHA-256 audit chain verify intact', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const res = pm.response.json();",
+              "  pm.expect(res.errors).to.be.undefined;",
+              "  pm.expect(res.data.adminAnalytics.totalSubjects).to.be.above(10);",
+              "  pm.expect(res.data.adminExperiments).to.be.an('array').that.is.not.empty;",
+              "  pm.expect(res.data.verifyAuditChain.chainValid).to.eql(true);",
+              "  pm.expect(res.data.verifyAuditChain.totalEntriesChecked).to.be.above(3);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-CSRF-Token", "value": "{{csrfToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"query\":\"{ adminAnalytics(days: 14) { totalSubjects overallOptInRate regionalBreakdown { regionCode consentRate } } adminExperiments { slug status totalExposures variants { key exposures conversions consentRate } } verifyAuditChain { chainValid totalEntriesChecked message } }\"}"
+        },
+        "url": "{{baseUrl}}/graphql"
+      }
+    },
+    {
+      "name": "11. Public SDK Rejects Missing/Invalid X-API-Key (/api/v1/sdk/config)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('SDK endpoint rejects bad API key with 401', function () {",
+              "  pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Key", "value": "ch_live_invalid_key" }],
+        "url": "{{baseUrl}}/api/v1/sdk/config?subjectKey={{anonSubject}}&region=US_CA"
+      }
+    },
+    {
+      "name": "12. Public SDK Fetch Config & Sticky SDUI Banner (/api/v1/sdk/config)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('SDK config returns 200 with region rule, active policy, and SDUI banner tree', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.regionRule.regimeName).to.eql('GDPR');",
+              "  pm.expect(body.sduiBanner.schemaVersion).to.eql('1.0');",
+              "  pm.expect(body.sduiBanner.root.type).to.eql('BannerShell');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-API-Key", "value": "{{sdkApiKey}}" }],
+        "url": "{{baseUrl}}/api/v1/sdk/config?subjectKey={{anonSubject}}&region=EU"
+      }
+    },
+    {
+      "name": "13. Public SDK Record Opt-Out Choice (/api/v1/sdk/consent)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('SDK records CCPA opt-out and enforces essential=true, optional=false', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.hasConsented).to.eql(true);",
+              "  pm.expect(body.purposes.essential).to.eql(true);",
+              "  pm.expect(body.purposes.ads).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-API-Key", "value": "{{sdkApiKey}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"subjectKey\":\"{{anonSubject}}\",\"region\":\"US_CA\",\"action\":\"REJECT_OPTIONAL\"}"
+        },
+        "url": "{{baseUrl}}/api/v1/sdk/consent"
+      }
+    }
+  ]
+}
